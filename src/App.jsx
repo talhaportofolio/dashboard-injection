@@ -196,8 +196,8 @@ export default function App() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <MachineCard title="Injection-01" data={machine1} />
-          <MachineCard title="Injection-02" data={machine2} />
+          <MachineCard title="Wujin-39" data={machine1} />
+          <MachineCard title="Wujin-41" data={machine2} />
         </div>
       </div>
     </div>       
