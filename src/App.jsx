@@ -191,7 +191,7 @@ export default function App() {
       <div className="w-full max-w-4xl">
         
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">PT. Ultra Prima Abadi</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">PT. Ultra Prima Abadi - Jakarta</h1>
           <p className="text-sm text-gray-500 mt-1">Monitoring Mesin Injection</p>
         </div>
 
@@ -199,13 +199,6 @@ export default function App() {
           <MachineCard title="Injection-01" data={machine1} />
           <MachineCard title="Injection-02" data={machine2} />
         </div>
-
-        <div className="mt-8 text-center">
-          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">
-            Industrial Monitoring System &copy; 2024
-          </p>
-        </div>
-
       </div>
     </div>       
   );
