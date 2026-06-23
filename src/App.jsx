@@ -3,53 +3,92 @@ import { Activity, PowerOff, Clock, AlertCircle, Wifi, Cpu, XCircle } from 'luci
 
 const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
 
+// Definisikan kedua topik agar sesuai dengan kode ESP32
 const TOPIC_M1 = 'pabrik/mesin_injection_1/status';
 const TOPIC_M2 = 'pabrik/mesin_injection_2/status';
 
 export default function App() {
   const [connectStatus, setConnectStatus] = useState('Menghubungkan...');
   
+  // Memisahkan state untuk Mesin 1 dan Mesin 2
   const [machine1, setMachine1] = useState({ status_mesin: "TIDAK DIKETAHUI", lastUpdate: null });
   const [machine2, setMachine2] = useState({ status_mesin: "TIDAK DIKETAHUI", lastUpdate: null });
 
   useEffect(() => {
     let mqttClient = null;
     let isMounted = true;
+    let simInterval = null;
 
     const initMqtt = () => {
       if (!window.mqtt || !isMounted) return;
 
-      mqttClient = window.mqtt.connect(MQTT_BROKER, {
-        clientId: `web_client_inj_${Math.random().toString(16).slice(2, 10)}`,
-        keepalive: 60,
-        clean: true,
-        reconnectPeriod: 5000,
-      });
+      // Cek apakah kode sedang berjalan di dalam iframe/Canvas platform ini
+      const isCanvas = window.self !== window.top;
 
-      mqttClient.on('connect', () => {
-        setConnectStatus('Terhubung');
-        mqttClient.subscribe(TOPIC_M1);
-        mqttClient.subscribe(TOPIC_M2);
-      });
-
-      mqttClient.on('reconnect', () => setConnectStatus('Menghubungkan ulang...'));
-      mqttClient.on('error', () => setConnectStatus('Koneksi Error'));
-      mqttClient.on('offline', () => setConnectStatus('Offline'));
-
-      mqttClient.on('message', (topic, message) => {
+      if (!isCanvas) {
+        // JIKA BERJALAN DI LAPTOP LOKAL ATAU HOSTING (Bukan di Canvas)
         try {
-          const payload = JSON.parse(message.toString());
+          mqttClient = window.mqtt.connect(MQTT_BROKER, {
+            clientId: `web_client_inj_${Math.random().toString(16).slice(2, 10)}`,
+            keepalive: 60,
+            clean: true,
+            reconnectPeriod: 5000,
+          });
+
+          mqttClient.on('connect', () => {
+            setConnectStatus('Terhubung');
+            // Subscribe ke kedua mesin sekaligus
+            mqttClient.subscribe(TOPIC_M1);
+            mqttClient.subscribe(TOPIC_M2);
+          });
+
+          mqttClient.on('reconnect', () => setConnectStatus('Menghubungkan ulang...'));
+          mqttClient.on('error', () => setConnectStatus('Koneksi Error'));
+          mqttClient.on('offline', () => setConnectStatus('Offline'));
+
+          mqttClient.on('message', (topic, message) => {
+            try {
+              const payload = JSON.parse(message.toString());
+              const timeNow = new Date().toLocaleTimeString('id-ID', { hour12: false });
+              
+              // Logika pembagian jalur data: Cek dari topik mana data ini berasal
+              if (topic === TOPIC_M1) {
+                setMachine1({ status_mesin: payload.status_mesin, lastUpdate: timeNow });
+              } else if (topic === TOPIC_M2) {
+                setMachine2({ status_mesin: payload.status_mesin, lastUpdate: timeNow });
+              }
+            } catch (error) {
+              console.error("Invalid JSON:", error);
+            }
+          });
+        } catch (error) {
+          console.error("Gagal melakukan inisiasi MQTT:", error);
+        }
+      } else {
+        // JIKA BERJALAN DI CANVAS (Menghindari SecurityError pemblokiran WebSocket)
+        console.warn("Koneksi WebSocket diblokir oleh lingkungan Canvas. Memulai Mode Simulasi.");
+        setConnectStatus('Mode Simulasi');
+        
+        const statuses = ['RUNNING', 'STAND BY', 'MATI'];
+        const initialTime = new Date().toLocaleTimeString('id-ID', { hour12: false });
+        
+        // Berikan status awal untuk simulasi
+        setMachine1({ status_mesin: 'RUNNING', lastUpdate: initialTime });
+        setMachine2({ status_mesin: 'STAND BY', lastUpdate: initialTime });
+
+        // Update status secara acak setiap 5 detik agar UI terlihat hidup di Canvas
+        simInterval = setInterval(() => {
+          if (!isMounted) return;
           const timeNow = new Date().toLocaleTimeString('id-ID', { hour12: false });
           
-          if (topic === TOPIC_M1) {
-            setMachine1({ status_mesin: payload.status_mesin, lastUpdate: timeNow });
-          } else if (topic === TOPIC_M2) {
-            setMachine2({ status_mesin: payload.status_mesin, lastUpdate: timeNow });
+          if (Math.random() > 0.4) {
+            setMachine1({ status_mesin: statuses[Math.floor(Math.random() * statuses.length)], lastUpdate: timeNow });
           }
-        } catch (error) {
-          console.error("Invalid JSON:", error);
-        }
-      });
+          if (Math.random() > 0.4) {
+            setMachine2({ status_mesin: statuses[Math.floor(Math.random() * statuses.length)], lastUpdate: timeNow });
+          }
+        }, 5000);
+      }
     };
 
     if (!window.mqtt) {
@@ -65,6 +104,7 @@ export default function App() {
     return () => {
       isMounted = false;
       if (mqttClient) mqttClient.end();
+      if (simInterval) clearInterval(simInterval);
     };
   }, []);
 
@@ -97,6 +137,8 @@ export default function App() {
     }
   };
 
+  // --- SUB-KOMPONEN KARTU MESIN ---
+  // Agar kode tidak diulang-ulang, kita buat "cetakan" kartunya di sini
   const MachineCard = ({ title, data }) => {
     const theme = getTheme(data.status_mesin);
 
@@ -111,6 +153,8 @@ export default function App() {
           <div className="flex items-center gap-2">
             {connectStatus === 'Terhubung' ? (
               <Wifi className="w-4 h-4 text-emerald-500 animate-pulse" />
+            ) : connectStatus === 'Mode Simulasi' ? (
+              <Activity className="w-4 h-4 text-blue-500 animate-pulse" />
             ) : (
               <XCircle className="w-4 h-4 text-rose-400" />
             )}
@@ -155,6 +199,13 @@ export default function App() {
           <MachineCard title="Injection-01" data={machine1} />
           <MachineCard title="Injection-02" data={machine2} />
         </div>
+
+        <div className="mt-8 text-center">
+          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">
+            Industrial Monitoring System &copy; 2024
+          </p>
+        </div>
+
       </div>
     </div>       
   );
